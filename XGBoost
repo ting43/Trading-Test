@@ -1,43 +1,9 @@
-#載入talib
-!wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-!tar -xzvf ta-lib-0.4.0-src.tar.gz
-%cd ta-lib
-!./configure --prefix=/usr
-!make
-!make install
-!pip install Ta-Lib
-
-# 匯入需要的套件
-# 資料科學常用數據分析套件
-import pandas as pd
-import numpy as np
-#from scipy.stats import skew
-# 儲存模型
-from pickle import dump
-# 擷取yahoo finance資料套件
-import yfinance as yf
-#----------------------機器學習套件-------------------#
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error as MSE
-import xgboost
-# 計算技術指標套件
-import talib as ta
-# 繪圖套件
-import matplotlib.pyplot as plt
-# %matplotlib inline
-# 畫蠟燭圖套件
-#import mplfinance as mpf
-# 處理時間資料套件
-from datetime import datetime
-
 # 股票代號
 stock_id = '2356'
 # 要預測 NextPeriod日後的報酬
 NextPeriod = 1
 # 下載近五年日資料
 data = yf.download(stock_id+'.tw',period='5y',interval='1d')
-
 def genAdjPrice(data):
   # Input:
   #       Close:      收盤價
@@ -49,27 +15,15 @@ def genAdjPrice(data):
   data['Adj Open'] = data['Adj Factor']*data['Open']
   data['Adj High'] = data['Adj Factor']*data['High']
   data['Adj Low'] = data['Adj Factor']*data['Low']
-
   return data
-
 # 增加調整股價
 data = genAdjPrice(data)
-
-data.info()
-
 # 目標變數定義預測目標
 # 目標變數: 下一個時期後的報酬率(%)
 Target=pd.DataFrame([])
 Target['NextProfit'] = (data['Adj Close'].shift(-NextPeriod)/data['Adj Close']-1)*100
-
 # 檢查目標變數
 pd.concat([Target,data['Adj Close']],axis=1).tail(10)
-
-# 最後一筆資料，沒有隔天的資料，可以刪除
-Target=Target.dropna()
-
-Target.shape
-
 def genTechIndicators(data):
   # 產生技術指標特徵
   # EMA
@@ -90,57 +44,19 @@ def genTechIndicators(data):
 
   # OBV
   data['OBV']=talib.OBV(data['Adj Close'],data['Volume'])
-
-
   return data
-
-# 增加 features
-data=genTechIndicators(data)
-
-data.head()
-
-# 紀錄最大NaN個數
-# 前maxNaN筆資料需要刪除
-maxNaN = data.isna().sum().max()
-print(maxNaN)
-
-data.iloc[:-1,10:].tail()
-
-data
 
 def preprocess(data):
-  # 選用模型訓練的特徵
-  # Row:
-  #   最後一天資料，沒有對應的target，所以刪除
-  # Column:
-  #   只使用技術指標的特徵
-  #   刪除 Open, High, Low, Close, Volume
   data = data.iloc[:-1,4:]
-
-  # 刪除 NaN值
-  #   產生 NaN的原因:
-  #   沒有足夠資料，計算技術指標
-  #   如: 計算10日MA時，前9筆資料無法計算
   data=data.dropna()
-
   return data
-
 #需要'Open', 'High', 'Low', 'Close'
 data = preprocess(data)
 data.columns = data.columns.str.replace("Adj Close", "Close")
 data.columns = data.columns.str.replace("Adj Open", "Open")
 data.columns = data.columns.str.replace("Adj High", "High")
 data.columns = data.columns.str.replace("Adj Low", "Low")
-
-data.isna().sum().max(
-
 Target.describe()
-
-# Target 需要drop前面沒有技術指標的資料
-Target=Target[maxNaN:]
-
-# 確認 data和 Target資料筆數一樣
-print(data.shape,Target.shape)
 
 # 分割訓練資料和測試資料
 x_test=data.iloc[900:,:]
@@ -152,44 +68,33 @@ y_train=Target.iloc[:900]
 model = xgboost.XGBRegressor()
 model.fit(x_train,y_train)
 print(f'Training Error(RMSE): {np.sqrt(MSE(y_train, model.predict(x_train)))}')
-
 # predict next day profit
 #y_test['PredProfit'] = model.predict(x_test)
 y_pred = model.predict(x_test)
 print(f'Testing Error: {np.sqrt(MSE(y_test,y_pred))}')
-
 train_pred = model.predict(x_train)
 test_pred = model.predict(x_test)
-
 x_train['pred'] = train_pred
 x_test['pred'] = test_pred
-
 x_train['origin'] = y_train
 x_test['origin'] = y_test
-
 x_train['pred_y'] = 0
 x_train['origin_y'] = 0
 x_test['origin_y'] = 0
 x_test['pred_y'] = 0
-
 x_test.loc[(x_test['pred'] >= 2), 'pred_y'] = 2
 x_test.loc[(x_test['pred'] <= -2), 'pred_y'] = 1
 x_test.loc[(x_test['origin'] >= 2), 'origin_y'] = 2
-
 x_train.loc[(x_train['pred'] >= 2), 'pred_y'] = 2
 x_train.loc[(x_train['pred'] <= -2), 'pred_y'] = 1
 x_train.loc[(x_train['origin'] >= 2), 'origin_y'] = 1
 
-!pip install backtesting
-
-from backtesting import Backtest, Strategy
 #隔天預設漲2%買與跌2%賣 停損如何做(假設沒遇到2%一直跌)
+from backtesting import Backtest, Strategy
 class SmaCross(Strategy): #交易策略命名為SmaClass，使用backtesting.py的Strategy功能
     def init(self):
-
         self.y=self.data.Y
         self.i=0
-
     def next(self):
         if self.y[self.i]==1:
             self.sell()
@@ -215,5 +120,4 @@ x_test.columns = x_test.columns.str.replace("Y", "pred_y")
 result = test.run()
 #執行回測程式並存到result中
 result.index=index_name
-print(result) # 直接print文字結果
 test.plot()
