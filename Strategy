@@ -1,12 +1,3 @@
-# Trading-Test
-import pandas as pd
-import matplotlib.pyplot as plt
-from finlab import data
-import numpy as np
-
-# 初始化 FinLab 資料
-#data = Data()
-
 # 參數設定
 stock_id = "2303"
 start_date = "2020-01-01"
@@ -16,7 +7,6 @@ atr_threshold = 1.2  # 設定 ATR 濾網閾值，可以根據需求調整
 # 手續費與交易稅設定
 def calculate_transaction_fee(amount):
     return max(amount * 0.001425, 20)  # 手續費最低 20 元
-
 def calculate_transaction_tax(amount):
     return amount * 0.003  # 交易稅 0.3%
 
