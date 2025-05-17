@@ -1,6 +1,5 @@
-stock_id = "2330"
-# 設定交易區間
-stock_data = stock_data.loc['2007-04-01':'2025-03-28']
+股票: 台積電(2330)
+期間: 2007-04-01~2025-03-28
 # === 1. 計算技術指標（共18種） ===
 def genTechIndicators(stock_data):
     indicators = pd.DataFrame(index=stock_data.index)
