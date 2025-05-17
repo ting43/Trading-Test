@@ -1,31 +1,8 @@
-# 參數設定
-stock_id = "2303"
-start_date = "2020-01-01"
-end_date = "2024-12-31"
-atr_threshold = 1.2  # 設定 ATR 濾網閾值，可以根據需求調整
+股票: 聯電(2303)
+回測時間: 2020-01-01~2024-12-31
+策略: 買進；賣出；加碼；濾網
+ATR 閾值: 1.2
 
-# 手續費與交易稅設定
-def calculate_transaction_fee(amount):
-    return max(amount * 0.001425, 20)  # 手續費最低 20 元
-def calculate_transaction_tax(amount):
-    return amount * 0.003  # 交易稅 0.3%
-
-# 獲取股價資料
-close = data.get('price:收盤價')[f"{stock_id}"]
-openn = data.get('price:開盤價')[f"{stock_id}"]
-low = data.get('price:最低價')[f"{stock_id}"]
-high = data.get('price:最高價')[f"{stock_id}"]
-volume = data.get('price:成交股數')[f"{stock_id}"]  # 獲取成交量
-
-stock_data = pd.DataFrame({
-    'close': close,
-    'open': openn,
-    'low': low,
-    'high': high,
-    'volume': volume
-})
-
-close_prices = stock_data["close"]
 
 # 計算移動平均線
 short_ma = close_prices.rolling(window=5).mean()
@@ -59,12 +36,6 @@ trades["sell_signal"] = sell_signal
 trades["new_high"] = is_new_high
 
 # 模擬交易
-position = 0  # 持有的張數
-entry_price = 0  # 進場價格
-trade_history = []  # 交易歷史記錄
-cum_profit = []  # 累計損益
-profit = 0  # 總損益
-
 for date, row in trades.iterrows():
     if row["buy_signal"] and position == 0:
         # 建立多頭部位，買進一張
@@ -137,13 +108,3 @@ print(f"賺賠比: {pl_ratio:.2f}")
 print(f"最大回撤: {max_drawdown:.2f}")
 print(f"最大回撤百分比: {max_drawdown_rate:.2f}%")  # 新增輸出
 print(f"累計損益: {cum_profit[-1]:.2f}")
-
-# 畫累計損益圖
-plt.figure(figsize=(12, 6))
-plt.plot(cum_profit, label="Cumulative P&L")
-plt.title("Cumulative P&L chart")
-plt.xlabel("date")  # 日期
-plt.ylabel("Accumulated profit")  # 累計損益
-plt.legend()
-plt.grid()
-plt.show()
