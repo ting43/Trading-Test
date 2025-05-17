@@ -1,5 +1,4 @@
-# 股票代號
-stock_id = '2356'
+股票: 英業達(2356)
 # 要預測 NextPeriod日後的報酬
 NextPeriod = 1
 # 下載近五年日資料
