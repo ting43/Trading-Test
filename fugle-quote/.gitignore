@@ -1,0 +1,8 @@
+.env
+.env.*
+*.key
+*.pem
+secrets*
+.vercel
+node_modules/
+.DS_Store

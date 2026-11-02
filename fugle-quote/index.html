@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>盤中即時報價</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--fg:#18202c;--muted:#5b6676;--line:#dbe0e8;--up:#d23c3c;--down:#1f9a5a;--warn:#b7791f}
+@media (prefers-color-scheme:dark){:root{--bg:#10141b;--card:#181e27;--fg:#e4e8ef;--muted:#93a0b2;--line:#2a323e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;min-height:100vh;display:flex;flex-direction:column}
+main{flex:1;padding:24px 16px;max-width:520px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+h1{font-size:18px;margin:0}
+.price{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;margin:8px 0}
+.price.stale{color:var(--muted)}
+.meta{font-size:13px;color:var(--muted)}
+.status{font-size:14px;padding:8px 12px;border-radius:6px;background:var(--bg)}
+.status.warn{color:var(--warn)}
+label{font-size:13px;color:var(--muted)}
+input{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;width:100px;background:var(--card);color:var(--fg)}
+button{font:inherit;padding:6px 14px;border:0;border-radius:6px;background:#2a55c9;color:#fff;cursor:pointer}
+footer{font-size:11px;color:var(--muted);text-align:center;padding:12px 16px}
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="row">
+      <h1 id="title">2330</h1>
+      <span class="meta" id="tag"></span>
+    </div>
+    <div class="price stale" id="price">—</div>
+    <div class="meta">累計成交量：<span id="vol">—</span> 股</div>
+    <div class="meta">最後更新：<span id="upd">—</span></div>
+    <div class="meta">資料來源：富果行情 API</div>
+  </div>
+  <div class="status" id="status">載入中…</div>
+  <div class="card row">
+    <label for="sym">股票代號</label>
+    <input id="sym" value="2330" inputmode="numeric">
+    <button id="go">切換</button>
+  </div>
+</main>
+<footer>本工具僅供個人輔助參考，不構成投資建議。</footer>
+<script>
+const INTERVAL = 5000, STALE_MS = 15000, OLD_QUOTE_MS = 3*60*1000;
+let symbol = "2330", lastOk = 0, pauseUntil = 0, timer = null, notFound = false;
+const $ = id => document.getElementById(id);
+
+function inSession(){
+  const tw = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Taipei"}));
+  const d = tw.getDay(), m = tw.getHours()*60 + tw.getMinutes();
+  return d >= 1 && d <= 5 && m >= 540 && m <= 810; // 09:00–13:30
+}
+function toDate(ts){
+  if (ts == null) return null;
+  const n = Number(ts);
+  return new Date(n > 1e14 ? n/1000 : n > 1e11 ? n : n*1000); // 微秒／毫秒／秒
+}
+function setStatus(msg, warn){ const s=$("status"); s.textContent=msg; s.className="status"+(warn?" warn":""); }
+function markStale(msg){ $("price").classList.add("stale"); setStatus(msg, true); }
+
+async function tick(){
+  if (!inSession()){
+    $("tag").textContent = "非即時";
+    markStale("目前非交易時段，暫停更新");
+    return;
+  }
+  if (notFound || Date.now() < pauseUntil) return;
+  try{
+    const r = await fetch(`/api/quote?symbol=${symbol}`);
+    if (r.status === 429){ pauseUntil = Date.now()+60000; markStale("已達呼叫上限，1 分鐘後重試"); return; }
+    if (r.status === 404){
+      notFound = true;
+      $("title").textContent = symbol; $("price").textContent = "—";
+      $("vol").textContent = "—"; $("upd").textContent = "—"; $("tag").textContent = "";
+      markStale(`查無此股票代號：${symbol}，已停止查詢`);
+      return;
+    }
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    if (d.lastPrice == null) throw 0;
+    $("title").textContent = d.name ? `${d.symbol} ${d.name}` : d.symbol;
+    $("price").textContent = Number(d.lastPrice).toLocaleString("zh-TW");
+    $("price").classList.remove("stale");
+    $("vol").textContent = d.tradeVolume != null ? Number(d.tradeVolume).toLocaleString("zh-TW") : "—";
+    const t = toDate(d.lastUpdated);
+    $("upd").textContent = t ? t.toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour12:false}) : "—";
+    lastOk = Date.now();
+    const fmt = x => x.toLocaleDateString("zh-TW",{timeZone:"Asia/Taipei"});
+    if (!t){
+      $("tag").textContent = "非即時";
+      markStale("無法確認資料時間，視為非即時");
+    } else if (fmt(t) !== fmt(new Date())){
+      $("tag").textContent = "非即時";
+      $("upd").textContent = t.toLocaleString("zh-TW",{timeZone:"Asia/Taipei",hour12:false});
+      markStale("非今日資料（可能休市或暫停交易）");
+    } else if (Date.now() - t.getTime() > OLD_QUOTE_MS){
+      $("tag").textContent = "非即時";
+      markStale("超過 3 分鐘沒有新資料");
+    } else {
+      $("tag").textContent = "盤中即時";
+      setStatus("資料正常更新中");
+    }
+  }catch(e){
+    markStale("資料暫時無法取得");
+  }
+  if (lastOk && Date.now()-lastOk > STALE_MS) markStale("資料暫時無法取得");
+}
+
+$("go").onclick = () => {
+  const v = $("sym").value.trim();
+  if (!/^\d{4,6}$/.test(v)){ setStatus("請輸入 4 到 6 位數的股票代號", true); return; }
+  symbol = v; lastOk = 0; notFound = false;
+  $("title").textContent = v; $("price").textContent = "—"; $("vol").textContent = "—"; $("upd").textContent = "—";
+  tick();
+};
+tick();
+timer = setInterval(tick, INTERVAL);
+</script>
+</body>
+</html>
